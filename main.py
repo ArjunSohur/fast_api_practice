@@ -13,22 +13,18 @@ from database import SessionLocal, engine
  
 app = FastAPI()
 
-sequence = Sequence('users_user_id_seq')
-sequence.create(engine)
-
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
-models.Base.metadata.create_all(bind=engine)
-
 class UserCreate(BaseModel):
+    user_id: str  # Change to string
     name: str
     email: EmailStr
     is_active: bool = True
 
 class UserResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: str  # Change to string
     name: str
     email: EmailStr
     is_active: bool
@@ -37,12 +33,12 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 class UserInterestsCreate(BaseModel):
-    user_id: int
+    user_id: str  # Change to string
     interests: str
 
 class UserInterestsResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: str  # Change to string
     interests: str
 
     class Config:
@@ -56,13 +52,10 @@ def get_db():
     finally:
         db.close()
 
-# Dependency with annotation for type hinting
-db_dependency = Depends(get_db)
-
 @app.post("/users/", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     try:
-        db_user = User(name=user.name, email=user.email, is_active=user.is_active)
+        db_user = User(user_id=user.user_id, name=user.name, email=user.email, is_active=user.is_active)
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
@@ -79,7 +72,6 @@ def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = db.query(User).offset(skip).limit(limit).all()
     return users
 
-# Endpoint to handle user interests
 @app.post("/user_interests/", response_model=UserInterestsResponse)
 async def create_user_interests(user_interests: UserInterestsCreate, db: Session = Depends(get_db)):
     db_interests = UserInterests(user_id=user_interests.user_id, interests=user_interests.interests)
@@ -87,3 +79,15 @@ async def create_user_interests(user_interests: UserInterestsCreate, db: Session
     db.commit()
     db.refresh(db_interests)
     return db_interests
+
+@app.get("/user_interests/", response_model=List[UserInterestsResponse])
+def read_user_interests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    interests = db.query(UserInterests).offset(skip).limit(limit).all()
+    return interests
+
+@app.get("/user_interests/{user_id}", response_model=UserInterestsResponse)
+def read_user_interests_by_user_id(num_id: str, db: Session = Depends(get_db)):  # Change to str
+    user_interests = db.query(UserInterests).filter(UserInterests.id == num_id).first()
+    if not user_interests:
+        raise HTTPException(status_code=404, detail="User interests not found")
+    return user_interests
